@@ -1,65 +1,60 @@
-# Скрипт для автоматического обновления RustDesk
+# PowerShell Script for RustDesk Auto-Update
+# Created by IgorMan. 2024
+# https://best-itpro.ru
 
-# Укажите путь к текущей установке RustDesk (если известно)
+
+# Specify the path to the current RustDesk installation (if known)
 $rustDeskPath = "${env:ProgramFiles}\RustDesk\RustDesk.exe"
 
-# Проверяем, установлен ли RustDesk
+# Checking if RustDesk is installed
 if (-Not (Test-Path $rustDeskPath)) {
-    Write-Host "RustDesk не найден. Убедитесь, что он установлен." -ForegroundColor Red
+    Write-Host "RustDesk not found. Make sure it is installed." -ForegroundColor Red
     exit 1
 }
 
-# Получаем текущую версию RustDesk
+# current version of RustDesk
 $currentVersion = (Get-Item $rustDeskPath).VersionInfo.FileVersion
-Write-Host "Текущая версия RustDesk: $currentVersion" -ForegroundColor Green
+Write-Host "Current version RustDesk: $currentVersion" -ForegroundColor Green
 
-# URL для загрузки последней версии RustDesk
-$latestReleaseUrl = "https://api.github.com/repos/rustdesk/rustdesk/releases/latest"
 
-# Получаем информацию о последнем релизе
+# Last release of RustDesk
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 try {
-    $latestRelease = Invoke-RestMethod -Uri $latestReleaseUrl -Method Get
+    $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/rustdesk/rustdesk/releases/latest" -Method Get
+    
 } catch {
-    Write-Host "Не удалось получить информацию о последнем релизе. Проверьте подключение к интернету." -ForegroundColor Red
+    Write-Host "Can't get info about last release version RustDesk. Check your Internet connection..." -ForegroundColor Red
     exit 1
 }
-
-# Получаем версию последнего релиза
 $latestVersion = $latestRelease.tag_name.TrimStart("v")
-Write-Host "Последняя версия RustDesk: $latestVersion" -ForegroundColor Green
+Write-Host "Last release version RustDesk: $latestVersion" -ForegroundColor Green
 
-# Сравниваем версии
+
+# Compare versions
 if ($currentVersion -eq $latestVersion) {
-    Write-Host "У вас уже установлена последняя версия RustDesk." -ForegroundColor Yellow
+    Write-Host "You already have the latest version of RustDesk installed." -ForegroundColor Yellow
     exit 0
 }
 
-# Находим ссылку на установщик для Windows
-$downloadUrl = $latestRelease.assets | Where-Object { $_.name -like "rustdesk-*.exe" } | Select-Object -First 1 -ExpandProperty browser_download_url
+$downloadUrl = $latestRelease.assets | Where-Object { $_.name -like "*64.exe" } | Select-Object -First 1 -ExpandProperty browser_download_url
+$destinationPath = "${env:Temp}\rustdesk-latest.exe"
 
-if (-Not $downloadUrl) {
-    Write-Host "Не удалось найти ссылку на установщик для Windows." -ForegroundColor Red
+# Download the latest version of RustDesk
+Invoke-WebRequest -Uri $downloadUrl -OutFile $destinationPath
+
+# Check if the installer has been downloaded successfully
+if (-Not (Test-Path $destinationPath)) {
+    Write-Host "Failed to download installer." -ForegroundColor Red
     exit 1
 }
 
-# Путь для сохранения установщика
-$installerPath = "$env:TEMP\rustdesk_installer.exe"
+# Installing a new version
+Write-Host "Installing a new version of RustDesk..." -ForegroundColor Cyan
+Start-Process -FilePath $rustDeskPath -ArgumentList "/S" -Wait
 
-# Загружаем установщик
-Write-Host "Загрузка последней версии RustDesk..." -ForegroundColor Cyan
-Invoke-WebRequest -Uri $downloadUrl -OutFile $installerPath
+# Remove the installer after completion
+Remove-Item $rustDeskPath -Force
 
-# Проверяем, успешно ли загружен установщик
-if (-Not (Test-Path $installerPath)) {
-    Write-Host "Не удалось загрузить установщик." -ForegroundColor Red
-    exit 1
-}
+Write-Host "RustDesk has been successfully updated to version $latestVersion." -ForegroundColor Green
 
-# Устанавливаем новую версию
-Write-Host "Установка новой версии RustDesk..." -ForegroundColor Cyan
-Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
-
-# Удаляем установщик после завершения
-Remove-Item $installerPath -Force
-
-Write-Host "RustDesk успешно обновлён до версии $latestVersion." -ForegroundColor Green
